@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voidbound GM Calculator</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#2c6e7f"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f6f3ec;--fg:#23201a;--mut:#6f685a;--card:#fffdf8;--line:#d8d0bf;--acc:#2c6e7f;--ok:#3a7d44;--warn:#b5532a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181a;--fg:#e8e4da;--mut:#9a9486;--card:#1e2326;--line:#343b3f;--acc:#6bb7c9;--ok:#78c081;--warn:#e08a5f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15181a;--fg:#e8e4da;--mut:#9a9486;--card:#1e2326;--line:#343b3f;--acc:#6bb7c9;--ok:#78c081;--warn:#e08a5f;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 Georgia,"Times New Roman",serif;max-width:900px;margin-inline:auto;padding:12px}
+h1{font-size:1.25rem;margin:0 0 6px}h2{font-size:1.05rem;margin:14px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tabs{display:flex;gap:6px;margin:8px 0}.tabs button{flex:1;padding:9px 4px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;font:inherit;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.b{padding:7px 11px;border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;font:inherit;cursor:pointer}
+button.g{background:transparent;color:var(--fg);border-color:var(--line)}
+button.sq{width:2.2em;padding:6px 0}
+input,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;max-width:100%}
+input[type=number]{width:4.2em}
+.big{font-size:1.5rem;font-weight:bold;min-width:1.6em;text-align:center}
+.mut{color:var(--mut);font-size:.85rem}.warn{color:var(--warn)}.ok{color:var(--ok)}
+table{border-collapse:collapse;width:100%}td,th{padding:4px 6px;border-top:1px solid var(--line);text-align:left;font-size:.92rem}
+tr.cur td{background:color-mix(in srgb,var(--acc) 18%,transparent);font-weight:bold}
+.it{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}.it .nm{flex:1}
+details{border-top:1px solid var(--line);padding:6px 0}summary{cursor:pointer;font-weight:bold}
+.enc{padding:5px 0;border-top:1px dashed var(--line)}.enc small{display:block;color:var(--mut)}
+.hit{outline:2px solid var(--acc);border-radius:6px}
+</style></head><body>
+<h1>Voidbound GM Calculator</h1>
+<div class="card" id="party"></div>
+<div class="tabs" role="tablist"><button data-tab="b" aria-selected="true">Builder</button><button data-tab="h" aria-selected="false">Hexes</button><button data-tab="r" aria-selected="false">Random</button><button data-tab="l" aria-selected="false">Loot</button></div>
+<div id="view"></div>
+<p class="mut">Rules: Pathfinder 2e encounter budgets, creature/hazard XP and treasure by level (Core Rulebook / GM Core). Everything is saved on this device.</p>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const XPC=[10,15,20,30,40,60,80,120,160],XPH=[2,3,4,6,8,12,16,24,32];
+const TIERS=[["Trivial",40,10],["Low",60,20],["Moderate",80,20],["Severe",120,30],["Extreme",160,40]];
+const OFF={10:-4,15:-3,20:-2,30:-1,40:0,60:1,80:2,120:3,160:4};
+const TOT=[175,300,500,850,1350,2000,2900,4000,5700,8000,11500,16500,25000,36500,54500,82500,128000,208000,355000,490000];
+const CUR=[40,70,120,200,320,500,720,1000,1400,2000,2800,4000,6000,9000,13000,20000,30000,48000,80000,140000];
+const EXT=[10,18,30,50,80,125,180,250,350,500,700,1000,1500,2250,3250,5000,7500,12000,20000,35000];
+let S={lvl:1,size:4,low:20,sand:false,tgt:"Moderate",enc:[],tab:"b",reg:"1",roll:null,lroll:null,ll:null};
+try{Object.assign(S,JSON.parse(localStorage.getItem("vgm")||"{}"))}catch(e){}
+let D=null;try{D=JSON.parse(localStorage.getItem("vgmd")||"null")}catch(e){}
+const save=()=>{try{localStorage.setItem("vgm",JSON.stringify(S))}catch(e){}};
+const adj=t=>t[0]==="Low"?S.low:t[2], bud=t=>t[1]+(S.size-4)*adj(t);
+const xp=it=>{const d=it.l-S.lvl;return d<-4||d>4?null:(it.t==="s"?XPH:XPC)[d+4]};
+const tierOf=x=>{let r="Trivial";for(const t of TIERS)if(x>=bud(t))r=t[0];return r};
+const compXp=c=>c.reduce((a,e)=>a+(xp({l:e.l,t:"c"})||0)*e.c,0);
+function sugg(n,verb){if(n<=0)return"";const v=[160,120,80,60,40,30,20,15,10],ex=v.filter(x=>x<=n&&n%x===0).slice(0,3);
+ const f=x=>`${verb} ${n/x}× level ${S.lvl+OFF[x]} (${x} XP each)`;
+ if(ex.length)return ex.map(f).join(" or ");const b=v.find(x=>x<=n);return b?`${verb} ${Math.floor(n/b)}× level ${S.lvl+OFF[b]} (${b} XP each), about ${n%b} XP short`:`${n} XP is below the smallest creature (10 XP)`}
+function approx(tag,n){const T=TIERS.find(t=>t[0]===tag),x=Math.round(T[1]*Math.pow(1.41,n-S.lvl)/5)*5,d=(S.size-4)*adj(T);
+ let s=`Designed as ${tag} ${n} (${T[1]} XP for 4 PCs at level ${n}). At your level ${S.lvl}: about ${x} XP of enemies, roughly ${tierOf(x)} for ${S.size} PCs.`;
+ if(d)s+=` To keep its intended threat, ${d>0?"add":"remove"} about ${Math.abs(d)} XP: ${sugg(Math.abs(d),d>0?"add":"remove")}.`;return s}
+function party(){$("party").innerHTML=`<div class="row"><span>Party level</span><button class="b g sq" data-a="lm">−</button><span class="big">${S.lvl}</span><button class="b g sq" data-a="lp">+</button>
+ <span style="margin-left:10px">Players</span>${[4,5,6].map(n=>`<button class="b ${S.size===n?"":"g"} sq" data-size="${n}">${n}</button>`).join("")}<input type="number" id="sz" min="1" max="10" value="${S.size}" title="Other size"></div>
+ <div class="mut" style="margin-top:4px">Budgets for ${S.size} PCs: ${TIERS.map(t=>t[0]+" "+bud(t)).join(" · ")}. <label><input type="checkbox" id="lw" ${S.low===15?"checked":""}> Low adjustment 15 (not 20)</label></div>`}
+function builder(){const tot=S.enc.reduce((a,e)=>a+(xp(e)||0)*e.c,0),T=TIERS.find(t=>t[0]===S.tgt),need=bud(T)-tot,cur=tierOf(tot);
+ return `<div class="card"><h2 style="margin-top:0">Encounter</h2>${S.enc.length?S.enc.map((e,i)=>{const x=xp(e);return `<div class="it"><div class="nm"><b>${esc(e.n||"Creature")}</b> <span class="mut">L${e.l} ${e.t==="s"?"simple hazard":e.t==="x"?"complex hazard":"creature"} · ${x==null?'<span class="warn">off the XP table</span>':x+" XP each"}</span></div>
+ <button class="b g sq" data-a="cm" data-i="${i}">−</button><b>${e.c}</b><button class="b g sq" data-a="cp" data-i="${i}">+</button><button class="b g sq" data-a="cx" data-i="${i}" aria-label="Remove">✕</button></div>`}).join(""):'<p class="mut">No creatures yet. Add some below, or load an encounter from the Hexes or Random tab.</p>'}
+ <div class="row" style="margin-top:8px"><select id="ft"><option value="c">Creature</option><option value="s">Simple hazard</option><option value="x">Complex hazard</option></select><input type="text" id="fn" placeholder="Name"><label>Level <input type="number" id="fl" value="${S.lvl}" min="-1" max="30"></label><label>× <input type="number" id="fc" value="1" min="1" max="20"></label><button class="b" data-a="add">Add</button><button class="b g" data-a="clr">Clear</button></div></div>
+ <div class="card"><h2 style="margin-top:0">Result for ${S.size} players, level ${S.lvl}</h2><p>Total XP: <b>${tot}</b> · Threat: <b>${cur}</b> · Each PC earns <b>${tot}</b> XP</p>
+ <table><tr><th>Threat</th><th>Budget</th><th>Difference</th></tr>${TIERS.map(t=>`<tr class="${t[0]===cur?"cur":""}"><td>${t[0]}</td><td>${bud(t)}</td><td>${tot-bud(t)>0?"+":""}${tot-bud(t)}</td></tr>`).join("")}</table>
+ <div class="row" style="margin-top:8px"><span>Aim for</span><select id="tg">${TIERS.map(t=>`<option ${t[0]===S.tgt?"selected":""}>${t[0]}</option>`).join("")}</select></div>
+ <p>${need>0?`Add about <b>${need} XP</b>: ${esc(sugg(need,"add"))}.`:need<0?`Over by <b>${-need} XP</b>: ${esc(sugg(-need,"remove"))}.`:"Exactly on budget."}</p>
+ <p class="mut">XP: creatures use the standard table; simple hazards are one fifth; complex hazards count as creatures. Party size changes the budget, not the XP earned.</p></div>`}
+const noData=()=>`<div class="card"><p>Load your adventure data to see hexes and random encounters.</p><input type="file" id="df" accept=".json,application/json"><p class="mut">Use the voidbound-gm-data.json file. It stays on this device only.</p></div>`;
+function hexes(){if(!D)return noData();
+ return D.hexes.reduce((h,x)=>{if(!h.seen.has(x.r)){h.seen.add(x.r);h.out+=`<h2>Region ${x.r}</h2>`}
+  const body=(x.enc.length||x.xp.length)?x.enc.map(e=>`<div class="enc"><b>${e.tag} ${e.n}</b> — ${esc(e.note)}<small>${esc(approx(e.tag,e.n))}</small></div>`).join("")+(x.xp.length?`<div class="enc mut">Book XP awards: ${x.xp.map(p=>p.a+" XP ("+esc(p.note)+")").join("; ")}</div>`:""):'<div class="enc mut">No set encounter or XP award found. Use the Random tab for this region.</div>';
+  h.out+=`<details><summary>${x.id} · ${esc(x.t)} <span class="mut">${x.enc.length?x.enc.length+" encounter"+(x.enc.length>1?"s":""):""}</span></summary>${body}</details>`;return h},{seen:new Set(),out:""}).out.replace(/^/,`<div class="card mut">Encounter text is a short label from the book. Open the hex in the adventure for the creatures.</div>`)}
+function encRow(e,i,key){const c=e.comp;let h=`<div class="enc ${S.roll===key+i?"hit":""}"><b>${esc(e.name)}</b> <span class="mut">Moderate ${e.n}</span>`;
+ if(c){const t=compXp(c);h+=`<small>${c.map(x=>x.c+"× "+esc(x.name)+" (L"+x.l+")").join(", ")} = ${t} XP, ${tierOf(t)} for ${S.size} PCs at level ${S.lvl}. ${S.size!==4?"To match Moderate: "+esc(bud(TIERS[2])-t>0?sugg(bud(TIERS[2])-t,"add"):bud(TIERS[2])-t<0?sugg(t-bud(TIERS[2]),"remove"):"on budget"):""}</small><button class="b g" data-a="load" data-k="${key}" data-i="${i}">Load in builder</button>`}
+ else h+=`<small>${esc(approx("Moderate",e.n))}</small>`;return h+"</div>"}
+function random(){if(!D)return noData();const L=D.rand[S.reg]||[];
+ return `<div class="card"><div class="row"><label>Region <select id="rg">${Object.keys(D.rand).map(r=>`<option ${r===S.reg?"selected":""}>${r}</option>`).join("")}</select></label><button class="b" data-a="roll">Roll d6</button>${S.roll!=null?`<b>${(+S.roll.slice(1))+1}</b>`:""}</div>
+ ${L.map((e,i)=>encRow(e,i,"r")).join("")}</div><div class="card"><h2 style="margin-top:0">Substructure encounters</h2>${D.sub.map((g,gi)=>`<details><summary>Regions ${g.regions}</summary>${g.list.map((e,i)=>encRow(e,i,"s"+gi)).join("")}</details>`).join("")}</div>`}
+const fm=a=>a.map(([l,n])=>`${n}× level ${l}`).join(", ");
+function loot(){const L=Math.min(20,Math.max(1,S.lvl)),k=L-1,size=S.size+(S.sand?1:0),ex=size-4;
+ const perm=L<20?[[L+1,2],[L,2]]:[[20,4]],cons=L===1?[[2,2],[1,3]]:L<20?[[L+1,2],[L,2],[L-1,2]]:[[20,4],[19,2]];
+ const cur=Math.max(0,CUR[k]+EXT[k]*ex),ll=S.ll==null?Math.min(12,S.lvl):S.ll,tbl=D&&D.loot?D.loot[ll]:null;
+ return `<div class="card"><h2 style="margin-top:0">Treasure for level ${L}, ${size} PCs</h2><p class="mut">Total for a party of 4: ${TOT[k].toLocaleString()} gp. This is the whole level (about the time between ${L} and ${L+1}), not one encounter.</p>
+ <p><b>Permanent items:</b> ${fm(perm)}${ex>0?` plus ${ex} more of level ${L} or ${L+1}`:ex<0?` minus ${-ex} (consider subtracting fewer)`:""}</p>
+ <p><b>Consumables:</b> ${fm(cons)}${ex>0?` plus ${2*ex} more (about half level ${L}, half ${L+1})`:ex<0?` minus ${-2*ex} (consider subtracting fewer)`:""}</p>
+ <p><b>Currency:</b> ${cur.toLocaleString()} gp</p><label><input type="checkbox" id="sb" ${S.sand?"checked":""}> Sandbox: count one extra PC (the book’s advice for free exploration where treasure may be missed)</label></div>
+ <div class="card"><h2 style="margin-top:0">Adventure loot table</h2>${tbl?`<div class="row"><label>Encounter level <select id="ll">${Array.from({length:13},(_,i)=>`<option ${i===ll?"selected":""}>${i}</option>`).join("")}</select></label><button class="b" data-a="lroll">Roll d6</button>${S.lroll!=null?`<b>${S.lroll+1}</b>`:""}</div>${tbl.map((t,i)=>`<div class="enc ${S.lroll===i?"hit":""}">${i+1}. ${esc(t)}</div>`).join("")}`:noData()}</div>`}
+function render(){party();$("view").innerHTML={b:builder,h:hexes,r:random,l:loot}[S.tab]();document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab))}
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const a=b.dataset.a,i=+b.dataset.i;
+ if(b.dataset.tab){S.tab=b.dataset.tab}else if(b.dataset.size){S.size=+b.dataset.size}
+ else if(a==="lm")S.lvl=Math.max(1,S.lvl-1);else if(a==="lp")S.lvl=Math.min(20,S.lvl+1);
+ else if(a==="add"){const c={t:$("ft").value,n:$("fn").value.trim(),l:parseInt($("fl").value)||0,c:Math.max(1,parseInt($("fc").value)||1)};S.enc.push(c)}
+ else if(a==="clr")S.enc=[];else if(a==="cm"){S.enc[i].c--;if(S.enc[i].c<1)S.enc.splice(i,1)}else if(a==="cp")S.enc[i].c++;else if(a==="cx")S.enc.splice(i,1);
+ else if(a==="roll")S.roll="r"+Math.floor(Math.random()*6);else if(a==="lroll")S.lroll=Math.floor(Math.random()*6);
+ else if(a==="load"){const k=b.dataset.k,l=k==="r"?D.rand[S.reg]:D.sub[+k.slice(1)].list;S.enc=l[i].comp.map(x=>({t:"c",n:x.name,l:x.l,c:x.c}));S.tab="b"}
+ save();render()});
+document.addEventListener("change",e=>{const t=e.target;
+ if(t.id==="sz")S.size=Math.min(10,Math.max(1,parseInt(t.value)||4));else if(t.id==="lw")S.low=t.checked?15:20;else if(t.id==="tg")S.tgt=t.value;
+ else if(t.id==="rg"){S.reg=t.value;S.roll=null}else if(t.id==="sb")S.sand=t.checked;else if(t.id==="ll"){S.ll=+t.value;S.lroll=null}
+ else if(t.id==="df"){const f=t.files[0];if(f)f.text().then(x=>{const d=JSON.parse(x);if(!d.hexes||!d.rand)throw 0;D=d;localStorage.setItem("vgmd",x);render()}).catch(()=>alert("That file didn’t work."));return}
+ else return;save();render()});
+render();if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script></body></html>
