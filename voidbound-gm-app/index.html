@@ -32,7 +32,7 @@ details{border-top:1px solid var(--line);padding:6px 0}summary{cursor:pointer;fo
 <div class="card" id="party"></div>
 <div class="tabs" role="tablist"><button data-tab="b" aria-selected="true">Builder</button><button data-tab="h" aria-selected="false">Hexes</button><button data-tab="r" aria-selected="false">Random</button><button data-tab="l" aria-selected="false">Loot</button></div>
 <div id="view"></div>
-<p class="mut">Rules: Pathfinder 2e encounter budgets, creature/hazard XP and treasure by level (Core Rulebook / GM Core). Everything is saved on this device.</p>
+<p class="mut">Rules: Pathfinder 2e encounter budgets, creature/hazard XP and treasure by level (Core Rulebook / GM Core). Everything is saved on this device. Creature names and levels come from the Foundry VTT Pathfinder 2e system data (Paizo, ORC licensed).</p>
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const XPC=[10,15,20,30,40,60,80,120,160],XPH=[2,3,4,6,8,12,16,24,32];
@@ -58,10 +58,16 @@ function approx(tag,n){const T=TIERS.find(t=>t[0]===tag),x=Math.round(T[1]*Math.
 function party(){$("party").innerHTML=`<div class="row"><span>Party level</span><button class="b g sq" data-a="lm">−</button><span class="big">${S.lvl}</span><button class="b g sq" data-a="lp">+</button>
  <span style="margin-left:10px">Players</span>${[4,5,6].map(n=>`<button class="b ${S.size===n?"":"g"} sq" data-size="${n}">${n}</button>`).join("")}<input type="number" id="sz" min="1" max="10" value="${S.size}" title="Other size"></div>
  <div class="mut" style="margin-top:4px">Budgets for ${S.size} PCs: ${TIERS.map(t=>t[0]+" "+bud(t)).join(" · ")}. <label><input type="checkbox" id="lw" ${S.low===15?"checked":""}> Low adjustment 15 (not 20)</label></div>`}
+const SRC={B1:"Bestiary",B2:"Bestiary 2",B3:"Bestiary 3",MC:"Monster Core",MC2:"Monster Core 2",NPC:"NPC Core",NPCG:"NPC Gallery",BotD:"Book of the Dead",HotW:"Howl of the Wild",LO:"Lost Omens",HZ:"Hazard",ADV:"This adventure"};
+let C=[];const all=()=>[...((D&&D.custom)||[]).map(x=>({n:x.n,l:x.l,s:"ADV"})),...C];
+const lvAdj=(l,m)=>m===1?l+(l<=0?2:1):m===-1?l-(l===1?2:1):l;
+function results(q){q=q.trim().toLowerCase();if(q.length<2)return '<p class="mut">Type at least 2 letters. '+(C.length?C.length+" creatures and hazards loaded.":"Creature list not loaded yet.")+" Elite and Weak change the level as the rules say.</p>";
+ const st=r=>r.n.toLowerCase().startsWith(q)?0:1,m=all().map((r,i)=>[r,i]).filter(([r])=>r.n.toLowerCase().includes(q)).sort((a,b)=>st(a[0])-st(b[0])||a[0].l-b[0].l).slice(0,10);
+ return m.length?m.map(([r,i])=>`<div class="it"><div class="nm"><b>${esc(r.n)}</b> <span class="mut">L${r.l}${r.k==="s"?" simple hazard":r.k==="x"?" complex hazard":""} · ${SRC[r.s]||r.s}${r.o?" (older edition)":""}</span></div><button class="b" data-a="addc" data-i="${i}">Add</button></div>`).join(""):'<p class="mut">No match. Use the custom form below.</p>'}
 function builder(){const tot=S.enc.reduce((a,e)=>a+(xp(e)||0)*e.c,0),T=TIERS.find(t=>t[0]===S.tgt),need=bud(T)-tot,cur=tierOf(tot);
  return `<div class="card"><h2 style="margin-top:0">Encounter</h2>${S.enc.length?S.enc.map((e,i)=>{const x=xp(e);return `<div class="it"><div class="nm"><b>${esc(e.n||"Creature")}</b> <span class="mut">L${e.l} ${e.t==="s"?"simple hazard":e.t==="x"?"complex hazard":"creature"} · ${x==null?'<span class="warn">off the XP table</span>':x+" XP each"}</span></div>
  <button class="b g sq" data-a="cm" data-i="${i}">−</button><b>${e.c}</b><button class="b g sq" data-a="cp" data-i="${i}">+</button><button class="b g sq" data-a="cx" data-i="${i}" aria-label="Remove">✕</button></div>`}).join(""):'<p class="mut">No creatures yet. Add some below, or load an encounter from the Hexes or Random tab.</p>'}
- <div class="row" style="margin-top:8px"><select id="ft"><option value="c">Creature</option><option value="s">Simple hazard</option><option value="x">Complex hazard</option></select><input type="text" id="fn" placeholder="Name"><label>Level <input type="number" id="fl" value="${S.lvl}" min="-1" max="30"></label><label>× <input type="number" id="fc" value="1" min="1" max="20"></label><button class="b" data-a="add">Add</button><button class="b g" data-a="clr">Clear</button></div></div>
+ <div class="row" style="margin-top:8px"><input type="search" id="q" placeholder="Search creatures and hazards (wyvern, ice troll…)" style="flex:1;min-width:12em" value="${esc(S.q||"")}"><select id="md"><option value="0" ${S.md==0?"selected":""}>Normal</option><option value="1" ${S.md==1?"selected":""}>Elite</option><option value="-1" ${S.md==-1?"selected":""}>Weak</option></select><button class="b g" data-a="clr">Clear</button></div><div id="sr">${results(S.q||"")}</div><details><summary>Add a custom creature or hazard</summary><div class="row" style="margin-top:8px"><select id="ft"><option value="c">Creature</option><option value="s">Simple hazard</option><option value="x">Complex hazard</option></select><input type="text" id="fn" placeholder="Name"><label>Level <input type="number" id="fl" value="${S.lvl}" min="-1" max="30"></label><label>× <input type="number" id="fc" value="1" min="1" max="20"></label><button class="b" data-a="add">Add</button></div></details></div>
  <div class="card"><h2 style="margin-top:0">Result for ${S.size} players, level ${S.lvl}</h2><p>Total XP: <b>${tot}</b> · Threat: <b>${cur}</b> · Each PC earns <b>${tot}</b> XP</p>
  <table><tr><th>Threat</th><th>Budget</th><th>Difference</th></tr>${TIERS.map(t=>`<tr class="${t[0]===cur?"cur":""}"><td>${t[0]}</td><td>${bud(t)}</td><td>${tot-bud(t)>0?"+":""}${tot-bud(t)}</td></tr>`).join("")}</table>
  <div class="row" style="margin-top:8px"><span>Aim for</span><select id="tg">${TIERS.map(t=>`<option ${t[0]===S.tgt?"selected":""}>${t[0]}</option>`).join("")}</select></div>
@@ -92,14 +98,16 @@ document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)r
  if(b.dataset.tab){S.tab=b.dataset.tab}else if(b.dataset.size){S.size=+b.dataset.size}
  else if(a==="lm")S.lvl=Math.max(1,S.lvl-1);else if(a==="lp")S.lvl=Math.min(20,S.lvl+1);
  else if(a==="add"){const c={t:$("ft").value,n:$("fn").value.trim(),l:parseInt($("fl").value)||0,c:Math.max(1,parseInt($("fc").value)||1)};S.enc.push(c)}
- else if(a==="clr")S.enc=[];else if(a==="cm"){S.enc[i].c--;if(S.enc[i].c<1)S.enc.splice(i,1)}else if(a==="cp")S.enc[i].c++;else if(a==="cx")S.enc.splice(i,1);
+ else if(a==="addc"){const r=all()[i],m=+S.md||0,l=lvAdj(r.l,m),t=r.k||"c",n=(m===1?"Elite ":m===-1?"Weak ":"")+r.n,f=S.enc.find(x=>x.n===n&&x.l===l&&x.t===t);if(f)f.c++;else S.enc.push({t,n,l,c:1})}else if(a==="clr")S.enc=[];else if(a==="cm"){S.enc[i].c--;if(S.enc[i].c<1)S.enc.splice(i,1)}else if(a==="cp")S.enc[i].c++;else if(a==="cx")S.enc.splice(i,1);
  else if(a==="roll")S.roll="r"+Math.floor(Math.random()*6);else if(a==="lroll")S.lroll=Math.floor(Math.random()*6);
  else if(a==="load"){const k=b.dataset.k,l=k==="r"?D.rand[S.reg]:D.sub[+k.slice(1)].list;S.enc=l[i].comp.map(x=>({t:"c",n:x.name,l:x.l,c:x.c}));S.tab="b"}
  save();render()});
 document.addEventListener("change",e=>{const t=e.target;
  if(t.id==="sz")S.size=Math.min(10,Math.max(1,parseInt(t.value)||4));else if(t.id==="lw")S.low=t.checked?15:20;else if(t.id==="tg")S.tgt=t.value;
- else if(t.id==="rg"){S.reg=t.value;S.roll=null}else if(t.id==="sb")S.sand=t.checked;else if(t.id==="ll"){S.ll=+t.value;S.lroll=null}
+ else if(t.id==="rg"){S.reg=t.value;S.roll=null}else if(t.id==="sb")S.sand=t.checked;else if(t.id==="md")S.md=+t.value;else if(t.id==="ll"){S.ll=+t.value;S.lroll=null}
  else if(t.id==="df"){const f=t.files[0];if(f)f.text().then(x=>{const d=JSON.parse(x);if(!d.hexes||!d.rand)throw 0;D=d;localStorage.setItem("vgmd",x);render()}).catch(()=>alert("That file didn’t work."));return}
  else return;save();render()});
+document.addEventListener("input",e=>{if(e.target.id==="q"){S.q=e.target.value;$("sr").innerHTML=results(S.q)}});
+if(window.fetch)fetch("pf2e-creatures.json").then(r=>r.json()).then(j=>{C=j;if(S.tab==="b")render()}).catch(()=>{});
 render();if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script></body></html>
